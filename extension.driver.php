@@ -84,9 +84,9 @@ class Extension_versatile_router extends Extension {
 	public function frontendPrePageResolve($context) {
 		if($this->_has_run) return;
 		$this->_has_run = true;
-		$page = FrontEnd::Page()->resolvePage($context['page']));
-		
-		if(Symphony::Configuration()->get('disable_standard_routing', 'versatile_router') == 'yes' or empty($page) {
+		$page = FrontEnd::Page()->resolvePage($context['page']);
+
+		if(Symphony::Configuration()->get('disable_standard_routing', 'versatile_router') == 'yes' or empty($page)) {
 
 			$route_to = versatile_router\Router::run();
 			if($route_to) {
