@@ -8,7 +8,7 @@ class Extension_versatile_router extends Extension {
 	public function install() {
 		Symphony::Configuration()->set('routes_file_path', 'routes.php', 'versatile_router');
 		Symphony::Configuration()->set('disable_standard_routing', 'no', 'versatile_router');
-		Administration::instance()->saveConfig();
+		Symphony::Configuration()->write();
 
 		if (!file_exists(WORKSPACE . '/routes.php')) {
 			// Copy routes file to workspace
@@ -18,7 +18,7 @@ class Extension_versatile_router extends Extension {
 
 	public function uninstall() {
 		Symphony::Configuration()->remove('versatile_router');
-		Administration::instance()->saveConfig();
+		Symphony::Configuration()->write();
 	}
 
 	public function getSubscribedDelegates() {
