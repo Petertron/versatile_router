@@ -8,7 +8,7 @@ class Extension_versatile_router extends Extension {
 	public function install() {
 		Symphony::Configuration()->set('routes_file_path', 'routes.php', 'versatile_router');
 		Symphony::Configuration()->set('disable_standard_routing', 'no', 'versatile_router');
-		Administration::instance()->saveConfig();
+		Symphony::Configuration()->write();
 
 		if (!file_exists(WORKSPACE . '/routes.php')) {
 			// Copy routes file to workspace
@@ -18,7 +18,7 @@ class Extension_versatile_router extends Extension {
 
 	public function uninstall() {
 		Symphony::Configuration()->remove('versatile_router');
-		Administration::instance()->saveConfig();
+		Symphony::Configuration()->write();
 	}
 
 	public function getSubscribedDelegates() {
@@ -49,7 +49,7 @@ class Extension_versatile_router extends Extension {
 
 		$div = new XMLElement('div', null, array('class' => 'column'));
 		$input = Widget::Input(
-			'settings[versatile_router][disable_standard_routing][', 'yes', 'checkbox'
+			'settings[versatile_router][disable_standard_routing]', 'yes', 'checkbox'
 			//$this->settingsPath('disable_standard_routing'), 'yes', 'checkbox'
 		);
 		if(Symphony::Configuration()->get('disable_standard_routing', 'versatile_router') == 'yes') {
@@ -84,9 +84,9 @@ class Extension_versatile_router extends Extension {
 	public function frontendPrePageResolve($context) {
 		if($this->_has_run) return;
 		$this->_has_run = true;
-		$page = FrontEnd::Page()->resolvePage($context['page']));
-		
-		if(Symphony::Configuration()->get('disable_standard_routing', 'versatile_router') == 'yes' or empty($page) {
+		$page = FrontEnd::Page()->resolvePage($context['page']);
+
+		if(Symphony::Configuration()->get('disable_standard_routing', 'versatile_router') == 'yes' or empty($page)) {
 
 			$route_to = versatile_router\Router::run();
 			if($route_to) {
