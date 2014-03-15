@@ -49,7 +49,7 @@ class Extension_versatile_router extends Extension {
 
 		$div = new XMLElement('div', null, array('class' => 'column'));
 		$input = Widget::Input(
-			'settings[versatile_router][disable_standard_routing][', 'yes', 'checkbox'
+			'settings[versatile_router][disable_standard_routing]', 'yes', 'checkbox'
 			//$this->settingsPath('disable_standard_routing'), 'yes', 'checkbox'
 		);
 		if(Symphony::Configuration()->get('disable_standard_routing', 'versatile_router') == 'yes') {
