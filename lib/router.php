@@ -1,53 +1,38 @@
 <?php
 
-namespace versatile_router; // namespace to confine functions
+namespace versatile_router;
+
+define('versatile_router\when_present', 'pr1_');
+define('versatile_router\when_not_present', 'pr0_');
+define('versatile_router\when_true', 'tr1_');
+define('versatile_router\when_not_true', 'tr0_');
+define('versatile_router\when_number', 'nu1_');
+define('versatile_router\when_not_number', 'nu0_');
+define('versatile_router\when_equal', 'eq1%');
+define('versatile_router\when_not_equal', 'eq0%');
+define('versatile_router\when_match', 'ma1%');
+define('versatile_router\when_no_match', 'ma0%');
+
+$param_pool = array();
 
 class Router {
 	public static $vars;
 	public static $method;
 	public static $page;
+	public static $param_pool;
 
-	// Run the router
+	public static function getParams() {
+		return self::$param_pool;
+	}
 
+	/*
+	* Run the router
+	*/
 	public static function run() {
 		self::$vars = array_merge($_SERVER, $_REQUEST);
 		self::$method = self::$vars['REQUEST_METHOD'];
 		self::$page = self::$vars['symphony-page'];
-
-		// Condition functions
-
-		function when_set($var) {
-			return array_key_exists(Router::$vars[$var], $var);
-		}
-
-		function when_not_set($var) {
-			return !array_key_exists(Router::$vars[$var], $var);
-		}
-
-		function when_is($var) {
-			return isset(Router::$vars[$var]);
-		}
-
-		function when_not($var) {
-			return !isset(Router::$vars[$var]);
-		}
-
-		function when_equal($var, $value) {
-			return Router::$vars[$var] == $value;
-		}
-
-		function when_not_equal($var, $value) {
-			return !(Router::$vars[$var] == $value);
-		}
-
-		function when_match($var, $regexp) {
-			if($var[0] == ":") {
-				return (object) array('name' => $var, 'regexp' => $regexp);
-			}
-			else {
-				return (boolean) preg_match($regexp, Router::$vars[$var]);
-			}
-		}
+		self::$param_pool = array();
 
 		// Routing functions
 
@@ -67,16 +52,11 @@ class Router {
 			Router::tryRoute($from, $to, $conditions, $status);
 		}
 
-		function group($conditions = false, $group = null) {
-			if(!($conditions === true or is_array($conditions))) return;
+		function group($group = null, $conditions = null) {
 			if(!is_object($group)) return;
-
 			if(is_array($conditions)) {
-				foreach($conditions as $cond) {
-					if($cond !== true) return;
-				}
+				if(!Router::testConditions($conditions)) return false;
 			}
-
 			// Execute group
 			$group();
 		}
@@ -91,62 +71,64 @@ class Router {
 		}
 		catch(\Exception $exception) {
 			if($exception->getCode() == 1) {
-				$result = $exception->getMessage();
+				$route_to = $exception->getMessage();
 			}
 		}
 
-		return $result;
+		return array('route_to' => $route_to, 'params' => self::$param_pool);
 	}
 
-	// Test a route
-
+	/*
+	* Test a route
+	*/
 	public static function tryRoute($from, $to, $conditions = null, $status = null) {
-		// Conditions
-		$params = array();
-		if($conditions !== null and $conditions !== true) {
-			if(is_object($conditions)) {
-				$params[$conditions->name] = $conditions->value;
-			}
-			elseif(is_array($conditions)) {
-				foreach($conditions as $cond) {
-					if($cond !== true) {
-						if(is_object($cond)) {
-							$params[$cond->name] = trim($cond->value, '()');
-						}
-						else return;
-					}
-				}
-			}
-			else return;
-		}
 		if($from != '') $from = '/' . trim($from, '/') . '/';
-		$to = ($status ? '' : '/') . trim($to, '/') . '/';
+		
+		// If not redirecting, make sure $to has leading and trailing slashes
+		if(!$status) $to = '/' . trim($to, '/') . '/';
 
-		if(preg_match_all('/(:[\w-]+)/u', $from, $matches)) {
+		if(preg_match_all('/(:\w+)/', $from, $matches)) {
 			foreach($matches[0] as $index => $name) {
-				$regexp = isset($params[$name]) ? $params[$name] : '[\w\-]+';
-				$from = str_replace($name, '(?P<' . substr($name, 1) . '>' . $regexp . ')', $from);
+				$from = str_replace($name, '(?P<' . substr($name, 1) . '>[\w\-:;@~!\[\](){}]+)', $from);
 			}
 		}
 
 		$from = str_replace('/', '\/', $from);
 		$from = str_replace('*', '([^\/\.]+)', $from); // replace asterisks with wildcard regexp
-		$from = '/^' . $from . '$/u';
-
+		$from = '/^' . $from . '$/';
 		if(!preg_match($from, self::$page, $matches)) return;
 
-		// Match made
+		// * Match made *
+
 		// Store any parameter values in $vars array
-		$vars = self::$vars;
 		foreach($matches as $name => $value) {
-			if(is_string($name)) $vars[':' . $name] = $value;
+			if(is_string($name)) {
+				self::$vars[':' . $name] = $value;
+			}
 		}
 
-		// Prepare destination string
+		// Test conditions
+		if(is_array($conditions)){
+			if(!self::testConditions($conditions)) return false;
+		}
+
+		// * Prepare destination string *
+
+		if(preg_match('/\[[^\]]*\]/', $to, $matches) == 1) {
+			$match = $matches[0];
+			$to = str_replace($match, '', $to);
+			preg_match_all('/:\w+/', $match, $matches);
+			if(is_array($matches[0]) and !empty($matches[0])) {
+				foreach($matches[0] as $param_name) {
+					self::$param_pool[$param_name] = self::$vars[$param_name];
+				}
+			}
+		}
+
 		$to = preg_replace_callback(
-			'/\{\:?\w+\}/u',
+			'/\{\:?[\w\-]+\}/',
 			function($match) use($vars){
-				return $vars[trim($match[0], '{}')];
+				return self::$vars[trim($match[0], '{}')];
 			},
 			$to
 		);
@@ -166,4 +148,55 @@ class Router {
 			throw new \Exception($to, 1);
 		}
 	}
+
+	/*
+	* Test conditions
+	*/
+	static function testConditions($conditions){
+		$success = true;
+		foreach($conditions as $condition){
+			$test = substr($condition, 0, 3);
+			$var_name = substr($condition, 4);
+			if($condition[3] == '%') {
+				$split_point = strpos($var_name, ' ');
+				$test_arg = substr($var_name, $split_point + 1);
+				$var_name = substr($var_name, 0, $split_point);
+			}
+			switch($test) {
+				case 'pr1':
+					$success = (boolean) array_key_exists($var_name, self::$vars);
+					break;
+				case 'pr0':
+					$success = (boolean) !array_key_exists($var_name, self::$vars);
+					break;
+				case 'tr1':
+					$success = isset(self::$vars[$var_name]);
+					break;
+				case 'tr0':
+					$success = !isset(self::$vars[$var_name]);
+					break;
+				case 'nu1':
+					$success = is_numeric(self::$vars[$var_name]);
+					break;
+				case 'nu0':
+					$success = !is_numeric(self::$vars[$var_name]);
+					break;
+				case 'eq1':
+					$success = (self::$vars[$var_name] == $test_arg);
+					break;
+				case 'eq0':
+					$success = !(self::$vars[$var_name] == $test_arg);
+					break;
+				case 'ma1':
+					$success = (boolean) preg_match($test_arg, self::$vars[$var_name]);
+					break;
+				case 'ma0':
+					$success = (boolean) !preg_match($test_arg, self::$vars[$var_name]);
+					break;
+			}
+			if(!$success) break;
+		}
+		return $success;
+	}
+
 }

@@ -1,16 +1,17 @@
 <?php
 
-require_once 'lib/router.php';
+require 'lib/router.php';
 
 class Extension_versatile_router extends Extension {
 	private $_has_run = false;
+	private $_params = NULL;
 
 	public function install() {
 		Symphony::Configuration()->set('routes_file_path', 'routes.php', 'versatile_router');
 		Symphony::Configuration()->set('disable_standard_routing', 'no', 'versatile_router');
 		Symphony::Configuration()->write();
 
-		if (!file_exists(WORKSPACE . '/routes.php')) {
+		if(!file_exists(WORKSPACE . '/routes.php')) {
 			// Copy routes file to workspace
 			copy(EXTENSIONS . '/versatile_router/lib/routes.php', WORKSPACE . '/routes.php');
 		}
@@ -36,7 +37,12 @@ class Extension_versatile_router extends Extension {
 			array(
 				'page' => '/frontend/',
 				'delegate' => 'FrontendPrePageResolve',
-				'callback' => 'frontendPrePageResolve'
+				'callback' => 'prePageResolve'
+			),
+			array(
+				'page' => '/frontend/',
+				'delegate' => 'FrontendParamsResolve',
+				'callback' => 'paramsResolve'
 			)
 		);
 	}
@@ -81,20 +87,44 @@ class Extension_versatile_router extends Extension {
 		}
 	}
 
-	public function frontendPrePageResolve($context) {
+	/*
+	* Run the router if required
+	*/
+	public function prePageResolve($context) {
 		if($this->_has_run) return;
 		$this->_has_run = true;
-		$page = FrontEnd::Page()->resolvePage($context['page']);
 
-		if(Symphony::Configuration()->get('disable_standard_routing', 'versatile_router') == 'yes' or empty($page)) {
+		$run_router = false;
+		if(Symphony::Configuration()->get('disable_standard_routing', 'versatile_router') == 'yes'){
+			$run_router = true;
+		}
+		else{
+			$page = FrontEnd::Page()->resolvePage($context['page']);
+			if(empty($page)) {
+				$run_router = true;
+			}
+		}
 
-			$route_to = versatile_router\Router::run();
-			if($route_to) {
-				$context['page'] = $route_to;
+		if(!$run_router) return;
+
+		$result = versatile_router\Router::run();
+		if($result['route_to']) {
+			$context['page'] = $result['route_to'];
+			if(!empty($result['params'])) {
+				$this->_params = $result['params'];
 			}
-			else {
-				throw new FrontendPageNotFoundException();
-			}
+		}
+		else {
+			throw new FrontendPageNotFoundException();
+		}
+	}
+
+	/*
+	* Add URL parameters to pool if there are any to add
+	*/
+	public function paramsResolve($context) {
+		if($this->_params) {
+			$context['params'] = array_merge($context['params'], $this->_params);
 		}
 	}
 }
